@@ -51,7 +51,7 @@ df -h /opt
 
 La instalación debe crear la política `Hwave` y `/opt/etc/init.d/S96hysteria`. Si `opkg` devuelve un error, revisa el mensaje y el espacio libre antes de continuar.
 
-## 4. Configurar Hysteria 2
+## 4. Pegar un enlace de Hysteria 2 en la configuración
 
 Abre el archivo en Entware:
 
@@ -59,7 +59,25 @@ Abre el archivo en Entware:
 nano /opt/etc/hysteria/config.json
 ```
 
-Sustituye su contenido por este ejemplo. Rellena los marcadores con los datos de tu enlace `hysteria2://...`. No publiques las contraseñas en incidencias ni documentación.
+Si ya tienes un enlace `hysteria2://...`, sustituye el contenido del archivo por esta plantilla corta:
+
+```json
+{
+  "server": "<PASTE_FULL_HYSTERIA2_URI_HERE>",
+  "fastOpen": true,
+  "lazy": true,
+  "tcpRedirect": { "listen": ":60018" },
+  "udpTProxy": { "listen": ":60020", "timeout": "20s" }
+}
+```
+
+Sustituye solo `<PASTE_FULL_HYSTERIA2_URI_HERE>` por el enlace completo desde `hysteria2://`. Conserva las comillas JSON. Los caracteres `@`, `?`, `&` y `#` no necesitan cambios. Si el mensajero muestra `\@`, elimina la barra invertida: el enlace debe contener `@` normal. No pegues una envoltura Markdown como `[enlace](dirección)`.
+
+Hysteria 2 acepta el enlace completo en `server`. La autenticación, TLS y Salamander ya van en el enlace; no añadas campos separados `auth`, `tls` ni `obfs` a esta variante. Guarda el archivo y sigue con los comandos de comprobación. Mantén privado el enlace.
+
+### Si necesitas configurarlo a mano
+
+Usa este ejemplo manual en lugar de la plantilla corta. Rellena los marcadores con los datos del servidor.
 
 ```json
 {

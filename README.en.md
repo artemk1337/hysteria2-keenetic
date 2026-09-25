@@ -51,7 +51,7 @@ df -h /opt
 
 Installation should create the `Hwave` access policy and `/opt/etc/init.d/S96hysteria`. If `opkg` reports an error, check it and the free space before proceeding.
 
-## 4. Configure Hysteria 2
+## 4. Paste a Hysteria 2 URI into the configuration
 
 Open the configuration in the Entware shell:
 
@@ -59,7 +59,25 @@ Open the configuration in the Entware shell:
 nano /opt/etc/hysteria/config.json
 ```
 
-Replace its contents with this example. Substitute the placeholders from your `hysteria2://...` connection. Do not paste credentials into public issues or documentation.
+If you already have a `hysteria2://...` URI, replace the file contents with this short template:
+
+```json
+{
+  "server": "<PASTE_FULL_HYSTERIA2_URI_HERE>",
+  "fastOpen": true,
+  "lazy": true,
+  "tcpRedirect": { "listen": ":60018" },
+  "udpTProxy": { "listen": ":60020", "timeout": "20s" }
+}
+```
+
+Replace only `<PASTE_FULL_HYSTERIA2_URI_HERE>` with the complete URI, starting at `hysteria2://`. Keep the JSON quotation marks. Characters such as `@`, `?`, `&`, and `#` need no special escaping here. If your messenger shows `\@`, remove the backslash; the URI must contain a plain `@`. Do not paste a Markdown wrapper such as `[link](address)`.
+
+Hysteria 2 can read the URI directly from `server`. The URI already carries authentication, TLS, and Salamander settings, so do not add separate `auth`, `tls`, or `obfs` fields to this version. Save the file and continue with the validation commands below. Keep the URI private.
+
+### If you need a manual configuration
+
+Use this manual example instead of the short template. Replace each placeholder with your server's settings.
 
 ```json
 {
