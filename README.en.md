@@ -1,36 +1,113 @@
-# Hysteria 2 split routing on Keenetic
+# Hysteria 2 on Keenetic Giga KN-1012 without a USB drive
 
-This script works with an existing [H-wave](https://github.com/for6to9si/H-wave) installation. For devices assigned to the `Hwave` access policy, Russian destination IPs use the normal connection; other destinations follow the Hysteria 2 route. The script downloads Russian IP ranges from [IPdeny](https://www.ipdeny.com/) and refreshes them daily.
+This guide starts with a router that has no Entware installation. It installs Entware in the router's internal storage, then H-wave and Hysteria 2. The `S99georoute` script sends Russian destination IPs directly and other destinations through Hysteria for devices assigned to the `Hwave` access policy.
 
-Routing is based on destination IP, not a list of blocked websites. A Russian site hosted on a foreign CDN may use the VPN. H-wave intercepts only the ports configured in H-wave; this script does not change that port list.
+Routing is based on IP addresses, not a list of blocked websites. A Russian site on a foreign CDN may use the VPN. H-wave intercepts only the ports configured in `/opt/etc/hwave/hwave-conf.json`; this script does not change them.
 
-## Requirements
+Commands at `(config)>` belong to the KeeneticOS CLI. Commands at `~ #` or `/ #` belong to the Entware shell. Do not include the prompt when copying a command.
 
-- Keenetic router with Entware and a working H-wave installation.
-- Entware shell (`~ #`). Do not run these shell commands in the KeeneticOS CLI (`(config)>`).
-- Free space on `/opt` and access to `ipdeny.com` from the router.
+## 1. Prepare the router
 
-On a Keenetic Giga KN-1012 with H-wave 2.12.2, the IPv4 list and `iptables` rules in `nat` and `mangle` were verified. Check IPv6 and reboot behavior on your own router.
+In the Keenetic web UI, open **Management → System settings → General system settings → Change component set**. Enable **OPKG packages** and **Netfilter kernel modules**. Reboot if requested. UI labels may vary with the KeeneticOS language and version.
 
-## Install
+Open **OPKG package manager**, select **Internal storage**, grant your account access to OPKG services, and save. No USB drive is needed on KN-1012. See the [official model guide](https://support.keenetic.ru/giga/kn-1012/ru/18482-installing-opkg-entware-in-the-router-s-internal-memory.html) for screenshots.
 
-Check that Hysteria is running:
+## 2. Install Entware in internal storage
 
-```sh
-/opt/etc/init.d/S96hysteria status
+Connect to the KeeneticOS CLI with an administrator account. For example, use `ssh admin@192.168.1.1` if that is your router's address and SSH access is enabled. At the `(config)>` prompt, run:
+
+```text
+opkg disk storage:/ https://bin.entware.net/aarch64-k3.10/installer/aarch64-installer.tar.gz
 ```
 
-In the Entware shell, install dependencies and download the script:
+Wait for `[5/5] ... Entware ... installed` in the router log. `Disk is unchanged` only reports that storage was already selected; it does not confirm installation. Do not format `storage:` or run `no opkg disk` as a routine retry.
+
+Enter the Entware shell from the KeeneticOS CLI:
+
+```text
+exec sh
+```
+
+The prompt changes to `~ #` or `/ #`. Check installation and free space:
+
+```sh
+opkg --version
+df -h /opt
+```
+
+The installer may also start Entware SSH on port 222. Its log contains the initial username and password. If it reports the defaults `root` and `keenetic`, change that password immediately with `passwd` in the Entware shell. Your KeeneticOS `admin` account and the Entware SSH account may be different.
+
+## 3. Install H-wave
+
+Run the following in the Entware shell. KN-1012 uses the `arm64` package from [H-wave v2.12.2](https://github.com/for6to9si/H-wave/releases/tag/v2.12.2):
 
 ```sh
 opkg update
-opkg install curl ipset
+opkg install curl nano ipset
+curl -fL https://github.com/for6to9si/H-wave/releases/download/v2.12.2/hysteria_2.12.2_arm64.ipk -o /tmp/hwave.ipk
+opkg install /tmp/hwave.ipk
+df -h /opt
+```
+
+Installation should create the `Hwave` access policy and `/opt/etc/init.d/S96hysteria`. If `opkg` reports an error, check it and the free space before proceeding.
+
+## 4. Configure Hysteria 2
+
+Open the configuration in the Entware shell:
+
+```sh
+nano /opt/etc/hysteria/config.json
+```
+
+Replace its contents with this example. Substitute the placeholders from your `hysteria2://...` connection. Do not paste credentials into public issues or documentation.
+
+```json
+{
+  "server": "<SERVER_HOST>:<PORT>",
+  "auth": "<AUTH_PASSWORD>",
+  "tls": {
+    "sni": "<TLS_SERVER_NAME>",
+    "insecure": false
+  },
+  "obfs": {
+    "type": "salamander",
+    "salamander": {
+      "password": "<OBFS_PASSWORD>"
+    }
+  },
+  "fastOpen": true,
+  "lazy": true,
+  "tcpRedirect": { "listen": ":60018" },
+  "udpTProxy": { "listen": ":60020", "timeout": "20s" }
+}
+```
+
+In `hysteria2://PASSWORD@HOST:PORT?...`, the part before `@` is `auth`, `HOST:PORT` is `server`, `obfs-password` is the Salamander password, and `sni` is the TLS server name. Decode URL-encoded characters such as `%40` and `%3A` before entering values. If `sni` is empty, remove the entire `"sni": "<TLS_SERVER_NAME>",` line; the certificate must still match the server address. If your server does not use Salamander, remove the `obfs` block. Native Hysteria 2 has no `fp=chrome` configuration field.
+
+Save in nano with `Ctrl+O`, `Enter`, `Ctrl+X`. Validate and start:
+
+```sh
+jq empty /opt/etc/hysteria/config.json
+chmod 600 /opt/etc/hysteria/config.json
+sed -i 's/^ENABLED=no$/ENABLED=yes/' /opt/etc/init.d/S96hysteria
+/opt/etc/init.d/S96hysteria restart
+/opt/etc/init.d/S96hysteria status
+```
+
+H-wave normally installs `jq` as a dependency. If it is missing, run `opkg install jq`. A running status confirms the process, not a working server connection; check traffic from one client after assigning the policy. H-wave logs are in `/opt/var/log/hwave/hwave.log`.
+
+## 5. Install split routing
+
+In the Entware shell, download and start the script. It refreshes Russian IPv4 and IPv6 lists from [IPdeny](https://www.ipdeny.com/) daily.
+
+```sh
 curl -fL https://raw.githubusercontent.com/artemk1337/hysteria2-keenetic/main/S99georoute -o /opt/etc/init.d/S99georoute
 chmod 700 /opt/etc/init.d/S99georoute
 /opt/etc/init.d/S99georoute start
+sleep 60
 ```
 
-Wait one minute, then inspect the rules:
+Verify IPv4 before assigning devices:
 
 ```sh
 /opt/etc/init.d/S99georoute status
@@ -39,13 +116,13 @@ iptables -t nat -S hwave | head
 iptables -t mangle -S hwave | head
 ```
 
-The status should be `running`. Both `hwave` chains should have `--match-set ru_geo4 dst -j RETURN` before `REDIRECT` or `TPROXY`. If the rule is missing, inspect the log before assigning devices to the policy:
+Expect `running`, a populated `ru_geo4` set, and `--match-set ru_geo4 dst -j RETURN` before `REDIRECT` or `TPROXY` in both `hwave` chains. If a rule is missing, read the log:
 
 ```sh
 tail -40 /opt/var/log/georoute.log
 ```
 
-If IPv6 is enabled in H-wave, check it too:
+If H-wave uses IPv6, inspect it separately:
 
 ```sh
 ipset list ru_geo6 | head
@@ -53,32 +130,34 @@ ip6tables -t nat -S hwave | head
 ip6tables -t mangle -S hwave | head
 ```
 
-Look for `--match-set ru_geo6 dst -j RETURN` in both chains. A missing IPv6 `hwave` chain means H-wave is not intercepting IPv6 in that table at the moment.
+Expect `--match-set ru_geo6 dst -j RETURN` in both existing IPv6 chains. Investigate a missing IPv6 rule before switching all devices.
 
-## Assign devices
+## 6. Assign devices
 
-In the Keenetic web UI, assign the `Hwave` access policy to one device first. Check a Russian and a foreign website on that device, then assign the remaining devices. New devices also need the policy unless you have configured an automatic assignment rule in Keenetic.
+In the Keenetic web UI, assign the `Hwave` access policy to one device. Test a Russian and a foreign website on that device, then assign the rest. Check that newly joined devices receive the policy too.
 
-You can inspect rule counters after opening the websites:
+Rule counters can help diagnose traffic after the test:
 
 ```sh
 iptables -t nat -L hwave -n -v --line-numbers | head
 ```
 
-Traffic to a Russian IP should increment the `ru_geo4` rule. Traffic to a foreign IP should reach `REDIRECT`. Counters show which rule received traffic; confirm that the tunnel works by opening a site on the client device.
+The `ru_geo4` counter should grow for a Russian destination IP; foreign destinations should reach `REDIRECT`. Confirm tunnel operation from the client device.
 
-## Roll back
+## Roll back and maintain
 
-Stop split routing with:
+Stop split routing without removing H-wave:
 
 ```sh
 /opt/etc/init.d/S99georoute stop
 ```
 
-H-wave will keep routing devices assigned to its policy through Hysteria. To disable the script at boot, remove it after stopping:
+Devices assigned to H-wave still use Hysteria. To disable script startup, remove it after stopping:
 
 ```sh
 rm /opt/etc/init.d/S99georoute
 ```
 
-The script checks its rules every 30 seconds after H-wave or firewall restarts and refreshes IP lists daily. If a download fails, it keeps the previous list. Logs are stored in `/opt/var/log/georoute.log`.
+The script reapplies its rules every 30 seconds after H-wave or firewall restarts and refreshes IP lists daily. If a download fails, it retains the previous list. Logs are in `/opt/var/log/georoute.log`.
+
+The IPv4 list and `iptables` rules in `nat` and `mangle` were verified on KN-1012 with H-wave 2.12.2. Check IPv6, reboot behavior, and client traffic on your own router.

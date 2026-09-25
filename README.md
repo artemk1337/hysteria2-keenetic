@@ -1,6 +1,6 @@
 # Hysteria 2 on Keenetic: GeoIP split routing
 
-This repository contains a small Entware script for an existing [H-wave](https://github.com/for6to9si/H-wave) installation. Devices assigned to the `Hwave` access policy use their normal connection for Russian destination IPs. Other destinations follow the H-wave route through Hysteria 2.
+Start with a Keenetic Giga KN-1012 without Entware. The guides cover internal-storage Entware installation, [H-wave](https://github.com/for6to9si/H-wave), Hysteria 2 configuration, and split routing. Devices assigned to the `Hwave` policy use their normal connection for Russian destination IPs. Other destinations follow the H-wave route through Hysteria 2.
 
 Read the setup guide in your language:
 
